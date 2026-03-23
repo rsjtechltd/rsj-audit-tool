@@ -1,25 +1,42 @@
 import { useState } from "react";
 
-// ─── CONFIGURATION ─────────────────────────────────────────────────────────
-// Update these values before deploying
+// ─── CONFIGURATION ──────────────────────────────────────────────────────────
 const CONFIG = {
   calendlyUrl: "https://calendly.com/rsjtechltd",
-  privacyPolicyUrl: "https://www.rsjtech.co.uk/privacy-policy", // Update once page is live
+  privacyPolicyUrl: "https://www.rsjtech.co.uk/privacy-policy",
   notificationEmail: "connect@rsjtech.co.uk",
+  supabase: {
+    url: "https://dstmrmzkiitvdwnrjnkg.supabase.co",
+    anonKey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRzdG1ybXpraWl0dmR3bnJqbmtnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NzE4NzIsImV4cCI6MjA4OTQ0Nzg3Mn0.Q-jvEV2lCvweckCReYyMZVsVA8pYtyOwp9V2vnCCMLI",
+  },
   emailjs: {
-    // Sign up free at emailjs.com — 200 emails/month on free plan
-    // 1. Create an account at emailjs.com
-    // 2. Add an Email Service (Gmail, Outlook etc.)
-    // 3. Create a Template — use variables: {{name}}, {{company}}, {{email}}, {{score}}, {{label}}, {{sector}}, {{source}}
-    // 4. Paste your Service ID, Template ID and Public Key below
-    // 5. Set enabled: true
-    serviceId: "service_g307ech",
-    templateId: "template_8jmf1ln",
-    publicKey: "dij0mf6ruYWYFTl9F",
-    enabled: true,
+    serviceId: "YOUR_EMAILJS_SERVICE_ID",
+    templateId: "YOUR_EMAILJS_TEMPLATE_ID",
+    publicKey: "YOUR_EMAILJS_PUBLIC_KEY",
+    enabled: false,
   },
 };
-// ───────────────────────────────────────────────────────────────────────────
+// ────────────────────────────────────────────────────────────────────────────
+
+// ─── SUPABASE HELPERS ───────────────────────────────────────────────────────
+const sbHeaders = {
+  "Content-Type": "application/json",
+  "apikey": CONFIG.supabase.anonKey,
+  "Authorization": `Bearer ${CONFIG.supabase.anonKey}`,
+};
+
+async function saveLead(lead) {
+  const res = await fetch(`${CONFIG.supabase.url}/rest/v1/leads`, {
+    method: "POST",
+    headers: { ...sbHeaders, "Prefer": "return=minimal" },
+    body: JSON.stringify(lead),
+  });
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Supabase insert failed: ${err}`);
+  }
+}
+// ────────────────────────────────────────────────────────────────────────────
 
 const BRAND = {
   primary: "#E8780A",
@@ -45,9 +62,7 @@ const questions = [
 
 const SOURCE_OPTIONS = ["LinkedIn", "Google Search", "Referred by a colleague", "Industry event or conference", "Email", "Other"];
 
-function isValidEmail(email) {
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-}
+function isValidEmail(e) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e); }
 
 async function sendNotification(contact, answers, score, label) {
   if (!CONFIG.emailjs.enabled) return;
@@ -61,22 +76,14 @@ async function sendNotification(contact, answers, score, label) {
         user_id: CONFIG.emailjs.publicKey,
         template_params: {
           to_email: CONFIG.notificationEmail,
-          name: contact.name,
-          company: contact.company,
-          email: contact.email,
-          phone: contact.phone || "not provided",
-          role: contact.role || "not provided",
-          source: contact.source || "not provided",
-          score: score,
-          label: label.replace(/_/g, " "),
-          sector: answers.sector,
-          size: answers.size,
+          name: contact.name, company: contact.company, email: contact.email,
+          phone: contact.phone || "not provided", role: contact.role || "not provided",
+          source: contact.source || "not provided", score, label: label.replace(/_/g, " "),
+          sector: answers.sector, size: answers.size,
         },
       }),
     });
-  } catch (e) {
-    console.log("EmailJS notification failed:", e);
-  }
+  } catch (e) { console.log("EmailJS error:", e); }
 }
 
 const css = `
@@ -174,7 +181,6 @@ function ContactForm({ onSubmit, loading }) {
   const [emailTouched, setEmailTouched] = useState(false);
   const emailValid = isValidEmail(contact.email);
   const formValid = contact.name && contact.company && contact.email && emailValid && gdpr;
-
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "48px 24px", animation: "fadeIn 0.3s ease" }}>
       <div style={{ fontSize: "11px", color: "#E8780A", letterSpacing: "0.12em", marginBottom: "8px" }}>ALMOST THERE</div>
@@ -182,7 +188,6 @@ function ContactForm({ onSubmit, loading }) {
       <p style={{ fontSize: "14px", color: "#B0A99A", marginBottom: "32px", fontFamily: "'DM Sans', sans-serif", lineHeight: 1.7 }}>
         Your personalised AI Readiness Report is ready to generate. Enter your details and we will follow up personally with sector-specific insights for your business.
       </p>
-
       {[
         { key: "name", label: "FULL NAME *", placeholder: "Jane Smith", type: "text" },
         { key: "company", label: "COMPANY NAME *", placeholder: "Acme Ltd", type: "text" },
@@ -194,22 +199,11 @@ function ContactForm({ onSubmit, loading }) {
           <input className="rsj-input" type={type} placeholder={placeholder} value={contact[key]} onChange={e => setContact(c => ({ ...c, [key]: e.target.value }))} />
         </div>
       ))}
-
       <div style={{ marginBottom: "16px" }}>
         <label style={{ fontSize: "11px", color: "#E8780A", letterSpacing: "0.1em", marginBottom: "8px", display: "block" }}>WORK EMAIL *</label>
-        <input
-          className={`rsj-input${emailTouched && contact.email && !emailValid ? " error" : ""}`}
-          type="email"
-          placeholder="jane@acme.co.uk"
-          value={contact.email}
-          onChange={e => setContact(c => ({ ...c, email: e.target.value }))}
-          onBlur={() => setEmailTouched(true)}
-        />
-        {emailTouched && contact.email && !emailValid && (
-          <div style={{ fontSize: "12px", color: "#e74c3c", marginTop: "4px", fontFamily: "'DM Sans', sans-serif" }}>Please enter a valid email address</div>
-        )}
+        <input className={`rsj-input${emailTouched && contact.email && !emailValid ? " error" : ""}`} type="email" placeholder="jane@acme.co.uk" value={contact.email} onChange={e => setContact(c => ({ ...c, email: e.target.value }))} onBlur={() => setEmailTouched(true)} />
+        {emailTouched && contact.email && !emailValid && <div style={{ fontSize: "12px", color: "#e74c3c", marginTop: "4px", fontFamily: "'DM Sans', sans-serif" }}>Please enter a valid email address</div>}
       </div>
-
       <div style={{ marginBottom: "24px" }}>
         <label style={{ fontSize: "11px", color: "#E8780A", letterSpacing: "0.1em", marginBottom: "8px", display: "block" }}>HOW DID YOU HEAR ABOUT US?</label>
         <div style={{ position: "relative" }}>
@@ -220,7 +214,6 @@ function ContactForm({ onSubmit, loading }) {
           <div style={{ position: "absolute", right: "16px", top: "50%", transform: "translateY(-50%)", color: "#888", pointerEvents: "none", fontSize: "12px" }}>▾</div>
         </div>
       </div>
-
       <div style={{ display: "flex", gap: "14px", alignItems: "flex-start", padding: "16px", background: "#161616", border: "1px solid #2A2A2A", borderRadius: "2px", marginBottom: "24px" }}>
         <div onClick={() => setGdpr(!gdpr)} style={{ width: "20px", height: "20px", border: `2px solid ${gdpr ? "#E8780A" : "#444"}`, background: gdpr ? "#E8780A" : "transparent", flexShrink: 0, cursor: "pointer", marginTop: "2px", display: "flex", alignItems: "center", justifyContent: "center", borderRadius: "2px" }}>
           {gdpr && <span style={{ color: "#000", fontSize: "11px", fontWeight: 700 }}>✓</span>}
@@ -231,12 +224,8 @@ function ContactForm({ onSubmit, loading }) {
           You may withdraw consent at any time by emailing connect@rsjtech.co.uk. *
         </p>
       </div>
-
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <button
-          style={{ background: (!formValid || loading) ? "#2A2A2A" : "#E8780A", color: (!formValid || loading) ? "#888" : "#000", border: "none", padding: "14px 32px", fontSize: "13px", fontWeight: 700, cursor: (!formValid || loading) ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", borderRadius: "2px", letterSpacing: "0.06em" }}
-          onClick={formValid && !loading ? () => onSubmit(contact) : undefined}
-        >
+        <button style={{ background: (!formValid || loading) ? "#2A2A2A" : "#E8780A", color: (!formValid || loading) ? "#888" : "#000", border: "none", padding: "14px 32px", fontSize: "13px", fontWeight: 700, cursor: (!formValid || loading) ? "not-allowed" : "pointer", fontFamily: "'DM Sans', sans-serif", borderRadius: "2px", letterSpacing: "0.06em" }} onClick={formValid && !loading ? () => onSubmit(contact) : undefined}>
           {loading ? "GENERATING..." : "GENERATE MY REPORT →"}
         </button>
       </div>
@@ -254,7 +243,7 @@ function Loading() {
   );
 }
 
-function Report({ report, answers, contact }) {
+function Report({ report, answers }) {
   let score = 50, scoreLabel = "DEVELOPING", risks = [], recs = [], summary = "";
   const sm = report.match(/SCORE:\s*(\d+)/i); if (sm) score = parseInt(sm[1]);
   const lm = report.match(/LABEL:\s*([A-Z_]+)/i); if (lm) scoreLabel = lm[1].replace(/_/g, " ");
@@ -271,7 +260,6 @@ function Report({ report, answers, contact }) {
     });
   }
   const scoreColor = score >= 70 ? "#2ecc71" : score >= 40 ? "#E8780A" : "#e74c3c";
-
   return (
     <div style={{ maxWidth: "680px", margin: "0 auto", padding: "48px 24px", animation: "fadeIn 0.4s ease" }}>
       <div style={{ marginBottom: "40px", textAlign: "center" }}>
@@ -285,7 +273,6 @@ function Report({ report, answers, contact }) {
         <div style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "20px", fontWeight: 700, color: scoreColor, marginBottom: "8px" }}>{scoreLabel}</div>
         {summary && <div style={{ fontSize: "14px", color: "#B0A99A", maxWidth: "540px", margin: "0 auto", lineHeight: 1.7, fontFamily: "'DM Sans', sans-serif" }}>{summary}</div>}
       </div>
-
       {risks.length > 0 && (
         <div style={{ background: "#1E1E1E", border: "1px solid #2A2A2A", borderRadius: "2px", padding: "24px", marginBottom: "16px" }}>
           <div style={{ fontSize: "11px", color: "#E8780A", letterSpacing: "0.12em", marginBottom: "16px", fontFamily: "'DM Sans', sans-serif" }}>IDENTIFIED RISKS</div>
@@ -297,7 +284,6 @@ function Report({ report, answers, contact }) {
           ))}
         </div>
       )}
-
       {recs.length > 0 && (
         <div style={{ background: "#1E1E1E", border: "1px solid #2A2A2A", borderRadius: "2px", padding: "24px", marginBottom: "16px" }}>
           <div style={{ fontSize: "11px", color: "#E8780A", letterSpacing: "0.12em", marginBottom: "16px", fontFamily: "'DM Sans', sans-serif" }}>PRIORITY RECOMMENDATIONS</div>
@@ -310,7 +296,6 @@ function Report({ report, answers, contact }) {
           ))}
         </div>
       )}
-
       <div style={{ background: "#E8780A", padding: "32px", borderRadius: "2px", marginTop: "24px", textAlign: "center" }}>
         <h2 style={{ fontFamily: "'DM Sans', sans-serif", fontSize: "22px", fontWeight: 700, color: "#000", marginBottom: "8px", marginTop: 0 }}>Ready to close these gaps?</h2>
         <p style={{ fontSize: "14px", color: "rgba(0,0,0,0.75)", marginBottom: "24px", fontFamily: "'DM Sans', sans-serif", lineHeight: 1.6 }}>
@@ -344,7 +329,7 @@ export default function App() {
     setGenLoading(true);
     setStage("loading");
 
-    const prompt = `You are an AI strategy consultant at RSJ Tech Ltd, a UK-based AI governance and adoption firm. A business has completed an AI Readiness Audit. Generate a structured report. You must write entirely in British English: use spellings such as organise, recognise, prioritise, analyse, standardise, behaviour, colour, favour. Never use American spellings. Do not use em dashes or double hyphens anywhere in your response.
+    const prompt = `You are an AI strategy consultant at RSJ Tech Ltd, a UK-based AI governance and adoption firm. A business has completed an AI Readiness Audit. Generate a structured report. Write entirely in British English: use spellings such as organise, recognise, prioritise, analyse, standardise, behaviour, colour. Never use American spellings. Do not use em dashes or double hyphens anywhere.
 
 Answers:
 - Sector: ${answers.sector}
@@ -386,7 +371,7 @@ SERVICE: RSJ TECH: [service name]`;
       const data = await res.json();
       reportText = data.content?.map(c => c.text || "").join("\n") || "";
     } catch {
-      reportText = "SCORE: 45\nLABEL: DEVELOPING\nSUMMARY: Based on your responses, your business is in the early stages of AI adoption with significant governance gaps. This is common for businesses your size, but unaddressed these gaps create real operational and compliance risk.\nRISKS:\n- No documented AI policies leaves the business exposed to UK data protection and regulatory risk\n- Inconsistent AI usage across staff creates variable output quality\n- Manual workflows represent significant avoidable cost\nRECOMMENDATIONS:\n1. Establish an AI Governance Framework\nDESC: Define approved tools, usage rules, and accountability within 30 days to eliminate compliance exposure.\nSERVICE: RSJ TECH: AI Governance\n2. Deploy Role-Specific AI Training\nDESC: Standardise how your team uses AI with workflows proven in your sector.\nSERVICE: RSJ TECH: AI Adoption Training\n3. Automate Your Highest-Friction Workflow\nDESC: Identify and eliminate the single most time-consuming manual process with a targeted AI system.\nSERVICE: RSJ TECH: Custom AI Systems";
+      reportText = "SCORE: 45\nLABEL: DEVELOPING\nSUMMARY: Based on your responses, your business is in the early stages of AI adoption with significant governance gaps. Unaddressed, these gaps create real operational and compliance risk.\nRISKS:\n- No documented AI policies leaves the business exposed to UK data protection and regulatory risk\n- Inconsistent AI usage across staff creates variable output quality\n- Manual workflows represent significant avoidable cost\nRECOMMENDATIONS:\n1. Establish an AI Governance Framework\nDESC: Define approved tools, usage rules, and accountability within 30 days to eliminate compliance exposure.\nSERVICE: RSJ TECH: AI Governance\n2. Deploy Role-Specific AI Training\nDESC: Standardise how your team uses AI with workflows proven in your sector.\nSERVICE: RSJ TECH: AI Adoption Training\n3. Automate Your Highest-Friction Workflow\nDESC: Identify and eliminate the single most time-consuming manual process with a targeted AI system.\nSERVICE: RSJ TECH: Custom AI Systems";
     }
 
     const scoreMatch = reportText.match(/SCORE:\s*(\d+)/i);
@@ -395,14 +380,25 @@ SERVICE: RSJ TECH: [service name]`;
     const label = labelMatch ? labelMatch[1] : "DEVELOPING";
 
     try {
-      const leadId = `lead-${Date.now()}`;
-      const lead = { id: leadId, timestamp: new Date().toISOString(), contact: contactData, answers, score, label, report: reportText };
-      await window.storage.set(leadId, JSON.stringify(lead), true);
-      let index = [];
-      try { const r = await window.storage.get("leads-index", true); if (r) index = JSON.parse(r.value); } catch (_) {}
-      index.unshift({ id: leadId, timestamp: lead.timestamp, name: contactData.name, company: contactData.company, email: contactData.email, role: contactData.role, phone: contactData.phone, source: contactData.source, sector: answers.sector, size: answers.size, score, label, stage: "New" });
-      await window.storage.set("leads-index", JSON.stringify(index), true);
-    } catch (e) { console.error("Storage:", e); }
+      await saveLead({
+        id: `lead-${Date.now()}`,
+        timestamp: new Date().toISOString(),
+        name: contactData.name,
+        company: contactData.company,
+        email: contactData.email,
+        phone: contactData.phone || null,
+        role: contactData.role || null,
+        source: contactData.source || null,
+        sector: answers.sector,
+        size: answers.size,
+        score,
+        label,
+        stage: "New",
+        answers,
+        report: reportText,
+        notes: null,
+      });
+    } catch (e) { console.error("Supabase save error:", e); }
 
     await sendNotification(contactData, answers, score, label);
 
